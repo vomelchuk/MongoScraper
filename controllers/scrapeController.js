@@ -12,53 +12,51 @@ mongoose.connect("mongodb://localhost/storiesPopulator", {
 });
 
 
-db.Temp.remove({}).exec();
-
 // Opening site
-router.get("/", function(req,res){
+router.get("/", function(req, res){
 
-	db.Temp.find().exec(function(err, tmpStories){
-		res.render("index", {stories: tmpStories});
+	db.Story.find(
+		{"saved": false},
+		function(err, dbStories){
+			res.render("index", {stories: dbStories});
 	});
 
 });
 
 // Saved stories
-router.get("/savedStories", function(req,res){
+router.get("/savedStories", function(req, res){
 	
-	db.Story.find().exec(function(err, dbStories){
-		var hbsStories = {stories: dbStories}
-		res.render("saved", hbsStories);
+	db.Story.find({"saved": true}).exec(function(err, dbStories){
+		res.render("saved", {stories: dbStories});
 	});
 	
 });
 
 // Saving story
-router.post("/saveStory", function(req,res){
+router.post("/saveStory", function(req, res){
 	
-	var story = new db.Story(req.body); // creating object that includes story to be deleted
-	story.save(function(err, createdStory) {
-		if (err) res.status(500).send(err);
-		story = req.body;
-	}).then(function(story){
-		db.Temp.remove({link: story.link}, function(err, data){
+	db.Story.findOneAndUpdate(
+		{"_id": req.body.id},
+		{"saved": true},
+		function(err, dbStory){
 			res.status(200).send("Story saved");
 			console.log("Scraped story was saved to DB.");
-		});
-	});
+		}
+	);
+
 	
 });
 
 // Deleting story
-router.post("/deleteStory", function(req,res){
+router.post("/deleteStory", function(req, res){
 	
 	db.Story.findById({_id: req.body.id})
 		.then(function(story){
-			db.Note.remove({_id: {$in: story.note}}, function(err,data){
+			db.Note.remove({_id: {$in: story.note}}, function(err, dbStory){
 				if(!err) {};
 			});
 		}).then(function(){
-			db.Story.remove({_id: req.body.id}, function(err, data){
+			db.Story.remove({_id: req.body.id}, function(err, dbStory){
 				if(!err) console.log("Story was deleted from DB /_id =",req.body.id,"/");
 			});
 		});
@@ -68,24 +66,26 @@ router.post("/deleteStory", function(req,res){
 // Deleting note
 router.post("/deleteNote", function(req,res){
 	//console.log("[story, note]->",req.body.storyId,',',req.body.noteId);
-	db.Note.remove({_id: req.body.noteId}, function(err,data){
-		if(!err) {};
-	}).then(function(){
-		db.Story.update(
-			{_id: req.body.storyId}, 
-			{$pull: 
-				{"note": req.body.noteId}
-			}, 
-			(err, story) => {
-				if (err) {
-					res.status(400).json(err);
+	db.Note.remove(
+		{_id: req.body.noteId}, 
+		function(err, data){
+			if(!err) {};
+		}).then(function(){
+			db.Story.update(
+				{_id: req.body.storyId}, 
+				{$pull: 
+					{"note": req.body.noteId}
+				}, 
+				(err, story) => {
+					if (err) {
+						res.status(400).json(err);
+					}
+					res.status(200);
+					console.log("Note was deleted");
 				}
-				res.status(200);
-				console.log("Note was deleted");
-			}
-		)
+			)
 
-	});
+		});
 
 });
 
@@ -128,58 +128,58 @@ router.post("/api/saveNote", function(req, res){
 router.get("/api/scrape", function(req, res) {
 
 	var srapedStoriesCount = 0;
+
 	request('http://www.foxnews.com/world.html', function (error, response, html) {
 		if (!error && response.statusCode == 200) {
 
 		  	var $ = cheerio.load(html);
+		  	
 			$('div.content.article-list').children("article").each(function(i, element){
 
 				var title0 = $(this).children("div.info").children("header").children("h2.title").children("a").text().trim();
 				var summary0 = $(this).children("div.info").children("div.content").children("p.dek").children("a").text().trim();
 				var link0 = $(this).children("div.info").children("header").children("h2.title").children("a").attr("href");
 				
-				if(String(link0).startsWith("/",0))
+				if( String(link0).startsWith("/",0) ) {
 					link0 = 'http://www.foxnews.com/' + link0;
+				}
 
-				var isSaved = 0;
-				
+				if (title0 == undefined || summary0 == undefined || link0 == undefined) return;
 
-				if (title0.length > 0 && summary0.length > 0 && link0.length > 0) {
+				var isSaved = false;
+				db.Story.findOne({link: link0}).exec(function(err, story) {
+					if (story == null) isSaved = true;
+					//console.log("story is finding", i);
+				}).then(function(isSaved){
+					if(!isSaved){
 
-					var result = {
-						title: title0,
-						summary: summary0,
-						link: link0
-					};
-
-
-					db.Story.findOne({link: link0}).exec(function(err, story) {
-						if (story == null) isSaved += 1;
-					}).then(function(){
-						db.Temp.findOne({link: link0}).exec(function(err, story) {
-							if (story == null) isSaved += 1;
-						}).then(function(){
-							if (isSaved == 2){
-								var temp = new db.Temp(result); 
-								temp.save(function(err, createdStory) {
-									if (err) console.log(err);
-									++srapedStoriesCount;	
-								});							
-							}
-
+						var story = new db.Story({
+							title: title0,
+							summary: summary0,
+							link: link0, 
+							saved: false
 						});
 
-					});
-
-				}
+						story.save(function(err, createdStory){
+							if (err) {
+								console.log(err);
+							} else{
+								//console.log("Story was scraped", i);	
+							}
+						});
+						++srapedStoriesCount;
+						//console.log("Story is saved", i);
+					}
+				});
+				
 			});
-			
-	  }
-	  
+			console.log("Handling stories end");
+		}
+		console.log("Requeset end", srapedStoriesCount);
 	});
+	//res.json(req.body);
 
-	res.json(srapedStoriesCount);
-	console.log('Scraped stories:', srapedStoriesCount);
+	console.log("router end",srapedStoriesCount);
 });
 
 

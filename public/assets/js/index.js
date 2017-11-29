@@ -6,33 +6,35 @@ $(document).ready(function() {
 
 	function saveStory(){
 
-		var story = {
-			title: $(this).prev().text(),
-			link: $(this).prev().attr("href"),
-			summary: $(this).parent().parent().next().text()
-		};
-
-		$(this).parent().parent().parent().remove();
+		var storyId =$(this).attr("id");
+		$("#story-"+storyId).hide();
 
 		$.ajax("/saveStory", {
 			type: "POST",
-			data: story,
+			data: {id: storyId},
 			success: setTimeout(function(){
 				location.reload();
-			},1000)
+			}, 1000)
 		});
 
 	}
 
 	function getStories() {
-		//$("myModal").modal("hide");
+
+		//var count = $(".panel-default").length;
+		//console.log('stories:', count);
+		// $.get("api/scrape").then(function(data){
+		// 	console.log(data);
+		// 	setTimeout(function(){
+		// 		location.reload();
+		// 	}, 1000)
+		// });
 		$.ajax("api/scrape", {
-			async: false,
 			type: "GET",
+			//data: { "count": count},
 			success: setTimeout(function(){
-				//res.json(222);
 				location.reload();
-			},2000)
+			}, 1000)
 		})
 
 	}

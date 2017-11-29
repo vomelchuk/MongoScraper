@@ -47,7 +47,7 @@ $(document).ready(function() {
 
 		var story = {id: $(this).parent().parent().parent().attr("id")};
 
-		$(this).parent().parent().parent().remove();
+		$(this).parent().parent().parent().hide();
 
 		$.ajax("/deleteStory", {
 			//async: false,
